@@ -1,0 +1,11 @@
+{
+  "name": "Double Beep Timer",
+  "short_name": "Beep Timer",
+  "description": "Two short beeps every minute.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#111827",
+  "theme_color": "#111827",
+  "icons": []
+}
