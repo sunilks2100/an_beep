@@ -5,8 +5,11 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#22c55e">
+
   <title>Double Beep Timer</title>
+
   <link rel="manifest" href="./manifest.webmanifest">
+
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -15,21 +18,45 @@
       text-align: center;
       padding: 40px 20px;
     }
+
+    h1 {
+      color: #22c55e;
+    }
+
     button {
       padding: 14px 28px;
       margin: 10px;
       font-size: 18px;
-      border: 0;
+      border: none;
       border-radius: 8px;
       cursor: pointer;
     }
-    #start { background: #22c55e; }
-    #stop { background: #ef4444; color: white; }
-    #status { margin-top: 25px; }
+
+    #start {
+      background: #22c55e;
+      color: black;
+    }
+
+    #stop {
+      background: #ef4444;
+      color: white;
+    }
+
+    #status {
+      margin-top: 25px;
+      font-size: 18px;
+    }
+
+    #countdown {
+      font-size: 24px;
+      margin-top: 15px;
+    }
   </style>
 </head>
+
 <body>
   <h1>Double Beep Timer</h1>
+
   <p>Play two beeps every 30 minutes.</p>
 
   <button id="start">Start</button>
@@ -38,42 +65,49 @@
   <p id="status">Timer stopped</p>
   <p id="countdown"></p>
 
+  <!-- Keep your existing short audio file -->
   <audio id="beepAudio" src="./double-beep-loop.wav"
          preload="auto"></audio>
 
   <script>
     const audio = document.getElementById("beepAudio");
+    const startButton = document.getElementById("start");
+    const stopButton = document.getElementById("stop");
     const status = document.getElementById("status");
     const countdown = document.getElementById("countdown");
 
+    // 30 minutes in milliseconds
     const INTERVAL_MS = 30 * 60 * 1000;
 
     let timerId = null;
-    let displayId = null;
+    let countdownId = null;
     let nextBeepTime = 0;
     let running = false;
 
     async function playBeep() {
       try {
+        audio.pause();
         audio.currentTime = 0;
         await audio.play();
       } catch (error) {
         status.textContent =
-          "Could not play audio. Please press Start again.";
-        stopTimer();
+          "Audio playback failed. Press Start again.";
+        console.error("Audio error:", error);
       }
     }
 
-    function stopTimer() {
-      running = false;
-      clearTimeout(timerId);
-      clearInterval(displayId);
-      timerId = null;
-      displayId = null;
-      audio.pause();
-      audio.currentTime = 0;
-      status.textContent = "Timer stopped";
-      countdown.textContent = "";
+    function updateCountdown() {
+      if (!running) return;
+
+      const remaining = Math.max(0, nextBeepTime - Date.now());
+      const totalSeconds = Math.ceil(remaining / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+
+      countdown.textContent =
+        "Next beep in " +
+        String(minutes).padStart(2, "0") + ":" +
+        String(seconds).padStart(2, "0");
     }
 
     function scheduleNextBeep() {
@@ -88,43 +122,62 @@
 
       timerId = setTimeout(
         scheduleNextBeep,
-        Math.max(1000, nextBeepTime - Date.now())
+        Math.max(250, nextBeepTime - Date.now())
       );
+
+      updateCountdown();
     }
 
-    function updateCountdown() {
-      if (!running) return;
+    function stopTimer() {
+      running = false;
 
-      const remaining = Math.max(0, nextBeepTime - Date.now());
-      const totalSeconds = Math.ceil(remaining / 1000);
-      const minutes = Math.floor(totalSeconds / 60);
-      const seconds = totalSeconds % 60;
+      clearTimeout(timerId);
+      clearInterval(countdownId);
 
-      countdown.textContent =
-        `Next beep in ${minutes}m ${seconds}s`;
+      timerId = null;
+      countdownId = null;
+
+      audio.pause();
+      audio.currentTime = 0;
+
+      status.textContent = "Timer stopped";
+      countdown.textContent = "";
+      startButton.disabled = false;
     }
 
-    document.getElementById("start").addEventListener("click", async () => {
+    startButton.addEventListener("click", async () => {
       if (running) return;
 
       running = true;
+      startButton.disabled = true;
+
       status.textContent = "Playing first beep...";
+
+      // Play the short audio immediately.
       await playBeep();
 
       if (!running) return;
 
+      // Schedule the next playback 30 minutes from now.
       nextBeepTime = Date.now() + INTERVAL_MS;
+
       status.textContent = "Timer running";
+
       timerId = setTimeout(scheduleNextBeep, INTERVAL_MS);
-      displayId = setInterval(updateCountdown, 1000);
+      countdownId = setInterval(updateCountdown, 1000);
+
       updateCountdown();
     });
 
-    document.getElementById("stop").addEventListener("click", stopTimer);
+    stopButton.addEventListener("click", stopTimer);
 
+    // Register the existing service worker.
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {
-        navigator.serviceWorker.register("./sw.js");
+        navigator.serviceWorker.register("./sw.js")
+          .catch(error => console.error(
+            "Service worker registration failed:", error
+          ));
       });
     }
   </script>
