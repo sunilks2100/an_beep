@@ -1,82 +1,132 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#111827">
-  <meta name="description" content="Plays two short beeps every minute, including while the phone is locked when Android allows background media playback.">
-  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#22c55e">
   <title>Double Beep Timer</title>
+  <link rel="manifest" href="./manifest.webmanifest">
   <style>
-    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: #111827; color: #f9fafb; }
-    main { width: min(92vw, 420px); box-sizing: border-box; padding: 28px; text-align: center; }
-    .icon { font-size: 54px; margin-bottom: 8px; }
-    h1 { font-size: 1.7rem; margin: 0 0 8px; }
-    p { color: #cbd5e1; line-height: 1.5; }
-    #status { margin: 24px 0; padding: 14px; border-radius: 12px; background: #1f2937; }
-    button { width: 100%; border: 0; border-radius: 12px; padding: 15px; margin: 7px 0; font-size: 1.05rem; font-weight: 650; }
-    #start { background: #22c55e; color: #052e16; }
-    #stop { background: #374151; color: white; }
-    button:disabled { opacity: .45; }
-    small { display: block; color: #9ca3af; margin-top: 18px; line-height: 1.5; }
+    body {
+      font-family: Arial, sans-serif;
+      background: #111827;
+      color: white;
+      text-align: center;
+      padding: 40px 20px;
+    }
+    button {
+      padding: 14px 28px;
+      margin: 10px;
+      font-size: 18px;
+      border: 0;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #start { background: #22c55e; }
+    #stop { background: #ef4444; color: white; }
+    #status { margin-top: 25px; }
   </style>
 </head>
 <body>
-<main>
-  <div class="icon">🔔</div>
   <h1>Double Beep Timer</h1>
-  <p>Two short beeps every minute.</p>
-  <div id="status" role="status">Stopped</div>
-  <button id="start">Start beeping</button>
-  <button id="stop" disabled>Stop</button>
-  <small>For lock-screen playback, keep media volume on. Android battery-saving settings or browser policies may still stop background playback. This PWA cannot guarantee alarms if the browser is force-stopped.</small>
-  <audio id="loop" src="double-beep-loop.wav" preload="auto" loop playsinline></audio>
-</main>
-<script>
-  const audio = document.getElementById('loop');
-  const statusText = document.getElementById('status');
-  const startButton = document.getElementById('start');
-  const stopButton = document.getElementById('stop');
+  <p>Play two beeps every 30 minutes.</p>
 
-  startButton.addEventListener('click', async () => {
-    try {
-      audio.currentTime = 0;
-      await audio.play();
-      statusText.textContent = 'Running — two beeps every minute';
-      startButton.disabled = true;
-      stopButton.disabled = false;
-      if ('mediaSession' in navigator) {
-        navigator.mediaSession.metadata = new MediaMetadata({
-          title: 'Double Beep Timer',
-          artist: 'Two beeps every minute'
-        });
-        navigator.mediaSession.setActionHandler('play', async () => {
-          try { await audio.play(); } catch (_) {}
-        });
-        navigator.mediaSession.setActionHandler('pause', () => {
-          audio.pause();
-          statusText.textContent = 'Paused';
-          startButton.disabled = false;
-          stopButton.disabled = true;
-        });
+  <button id="start">Start</button>
+  <button id="stop">Stop</button>
+
+  <p id="status">Timer stopped</p>
+  <p id="countdown"></p>
+
+  <audio id="beepAudio" src="./double-beep-loop.wav"
+         preload="auto"></audio>
+
+  <script>
+    const audio = document.getElementById("beepAudio");
+    const status = document.getElementById("status");
+    const countdown = document.getElementById("countdown");
+
+    const INTERVAL_MS = 30 * 60 * 1000;
+
+    let timerId = null;
+    let displayId = null;
+    let nextBeepTime = 0;
+    let running = false;
+
+    async function playBeep() {
+      try {
+        audio.currentTime = 0;
+        await audio.play();
+      } catch (error) {
+        status.textContent =
+          "Could not play audio. Please press Start again.";
+        stopTimer();
       }
-    } catch (e) {
-      statusText.textContent = 'Could not start audio. Tap Start again and check phone volume.';
     }
-  });
 
-  stopButton.addEventListener('click', () => {
-    audio.pause();
-    audio.currentTime = 0;
-    statusText.textContent = 'Stopped';
-    startButton.disabled = false;
-    stopButton.disabled = true;
-  });
+    function stopTimer() {
+      running = false;
+      clearTimeout(timerId);
+      clearInterval(displayId);
+      timerId = null;
+      displayId = null;
+      audio.pause();
+      audio.currentTime = 0;
+      status.textContent = "Timer stopped";
+      countdown.textContent = "";
+    }
 
-  if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
-  }
-</script>
+    function scheduleNextBeep() {
+      if (!running) return;
+
+      const remaining = nextBeepTime - Date.now();
+
+      if (remaining <= 0) {
+        playBeep();
+        nextBeepTime = Date.now() + INTERVAL_MS;
+      }
+
+      timerId = setTimeout(
+        scheduleNextBeep,
+        Math.max(1000, nextBeepTime - Date.now())
+      );
+    }
+
+    function updateCountdown() {
+      if (!running) return;
+
+      const remaining = Math.max(0, nextBeepTime - Date.now());
+      const totalSeconds = Math.ceil(remaining / 1000);
+      const minutes = Math.floor(totalSeconds / 60);
+      const seconds = totalSeconds % 60;
+
+      countdown.textContent =
+        `Next beep in ${minutes}m ${seconds}s`;
+    }
+
+    document.getElementById("start").addEventListener("click", async () => {
+      if (running) return;
+
+      running = true;
+      status.textContent = "Playing first beep...";
+      await playBeep();
+
+      if (!running) return;
+
+      nextBeepTime = Date.now() + INTERVAL_MS;
+      status.textContent = "Timer running";
+      timerId = setTimeout(scheduleNextBeep, INTERVAL_MS);
+      displayId = setInterval(updateCountdown, 1000);
+      updateCountdown();
+    });
+
+    document.getElementById("stop").addEventListener("click", stopTimer);
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./sw.js");
+      });
+    }
+  </script>
 </body>
 </html>
